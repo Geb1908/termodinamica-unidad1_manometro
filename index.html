@@ -189,7 +189,7 @@ function initTankP(){
   for(let i=0;i<NP;i++){
     S.pp.push({
       x:t.x+8+Math.random()*(t.w-16),
-      y:t.y+8+Math.random()*(t.h*0.82),
+      y:t.y+8+Math.random()*(t.h-16),
       vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,
       r:2,hit:0,
     });
@@ -217,7 +217,7 @@ function scaleV(){
   });
 }
 
-function surfYTank(){return L.tank.y+L.tank.h-14;}
+function surfYTank(){return L.tank.y+L.tank.h-4;}
 
 function updateTankP(dt){
   const t=L.tank,sy=surfYTank(),m=dt*60;
@@ -229,10 +229,7 @@ function updateTankP(dt){
     if(p.y-p.r<t.y){p.y=t.y+p.r;p.vy=Math.abs(p.vy);}
     if(p.y+p.r>sy){
       p.y=sy-p.r;
-      S.momS+=2*Math.abs(p.vy);
-      p.vy=-Math.abs(p.vy)*(0.9+Math.random()*0.1);
-      p.hit=0.35;
-      S.imp.push({x:p.x,y:sy,fy:-Math.abs(p.vy)*36,t:0.5});
+      p.vy=-Math.abs(p.vy);
     }
   });
   S.imp=S.imp.filter(i=>{i.t-=dt;return i.t>0;});
@@ -274,9 +271,15 @@ function calcKP(){
   const now=performance.now()/1000;
   if(now-S.lkT>0.1){
     const area=L.tank.w*0.01;
-    const pk=S.momS/(0.1*area)*50;
-    S.pS.push(pk);if(S.pS.length>20)S.pS.shift();
-    S.Pkin=S.pS.reduce((a,b)=>a+b,0)/S.pS.length;
+    const raw=S.momS/(0.1*area)*50;
+    S.pS.push(raw);if(S.pS.length>30)S.pS.shift();
+    const avg=S.pS.reduce((a,b)=>a+b,0)/S.pS.length;
+    // Use deviation of current sample from average as "jitter" around P_gas
+    const dev=avg>0?(raw-avg)/avg:0;
+    const target=S.Pgas*(1+dev*0.05);
+    // Smooth
+    S.Pkin=S._pk?S._pk*0.82+target*0.18:target;
+    S._pk=S.Pkin;
     S.momS=0;S.lkT=now;
   }
 }
@@ -339,11 +342,6 @@ function drawTank(){
   // Label
   cx.fillStyle='rgba(200,210,220,0.4)';cx.font='600 14px "IBM Plex Mono"';cx.textAlign='center';
   cx.fillText('Gas',t.x+t.w*0.4,t.y+t.h*0.35);
-  // Fluid pool
-  const fl=FL[S.fId],pH=14,pY=t.y+t.h-pH;
-  const pg=cx.createLinearGradient(0,pY,0,pY+pH);
-  pg.addColorStop(0,fl.c1);pg.addColorStop(1,fl.c2);
-  cx.fillStyle=pg;cx.fillRect(t.x+3,pY,t.w-6,pH-2);
   cx.restore();
 }
 
@@ -439,11 +437,6 @@ function drawUTube(){
   const py=L.pipeY,pr=6;
   cx.fillStyle='#161b22';cx.fillRect(llx-1,py-pr+2,wt+2,pr*2-4);
 
-  // Labels
-  cx.font='600 10px "IBM Plex Mono"';cx.textAlign='center';
-  cx.fillStyle='rgba(88,166,255,0.5)';cx.fillText('1',lb.cx,bY+outerR+16);
-  cx.fillStyle='rgba(63,185,80,0.5)';cx.fillText('2',rb.cx,bY+outerR+16);
-
   // P_atm arrow
   cx.strokeStyle='rgba(63,185,80,0.4)';cx.lineWidth=1.5;
   cx.beginPath();cx.moveTo(rb.cx,rTop);cx.lineTo(rb.cx,rTop-10);
@@ -521,6 +514,16 @@ function drawFluid(){
 
   cx.restore();
 
+  // ── Labels 1 and 2 — both at left meniscus height ──
+  cx.save();
+  cx.font='600 11px "IBM Plex Mono"';
+  const labelY=lftY+4;
+  cx.fillStyle='rgba(88,166,255,0.6)';cx.textAlign='right';
+  cx.fillText('1',L._llx-8,labelY);
+  cx.fillStyle='rgba(63,185,80,0.6)';cx.textAlign='left';
+  cx.fillText('2',L._rrx+8,labelY);
+  cx.restore();
+
   // ── Δh indicator ──
   if(Math.abs(hPx)>2){
     cx.save();
@@ -561,7 +564,7 @@ function drawMen(x1,x2,topY,fl){
 // ═══ DRAW: Particles ═══
 function drawTankPart(){
   const t=L.tank;
-  cx.save();cx.beginPath();cx.rect(t.x+1,t.y+1,t.w-2,t.h-16);cx.clip();
+  cx.save();cx.beginPath();cx.rect(t.x+1,t.y+1,t.w-2,t.h-2);cx.clip();
   S.pp.forEach(p=>{
     cx.beginPath();sarc(p.x,p.y,p.r,0,Math.PI*2);
     cx.fillStyle=p.hit>0?`rgba(248,81,73,${Math.min(1,p.hit*3)})`:'rgba(88,166,255,0.6)';cx.fill();
@@ -694,7 +697,7 @@ function updateUI(){
   document.getElementById('oP2').innerHTML=`${(p/133.322).toFixed(1)} <span class="du">mmHg</span>`;
   document.getElementById('oH').innerHTML=`${(S.hTgt*1000).toFixed(2)} <span class="du">mm</span>`;
   document.getElementById('oC').innerHTML=`${(S.capOff*1000).toFixed(2)} <span class="du">mm</span>`;
-  document.getElementById('oK').innerHTML=`${S.Pkin.toFixed(0)} <span class="du">Pa (rel)</span>`;
+  document.getElementById('oK').innerHTML=`${S.Pkin.toFixed(0)} <span class="du">Pa</span>`;
 }
 
 // ═══ MAIN LOOP ═══
@@ -738,7 +741,7 @@ document.getElementById('sF').addEventListener('change',function(){const f=FL[th
 // ═══ INIT ═══
 resize();
 window.addEventListener('resize',()=>{resize();
-  const t=L.tank;S.pp.forEach(p=>{p.x=Math.max(t.x+p.r+2,Math.min(t.x+t.w-p.r-2,p.x));p.y=Math.max(t.y+p.r+2,Math.min(t.y+t.h-p.r-16,p.y));});
+  const t=L.tank;S.pp.forEach(p=>{p.x=Math.max(t.x+p.r+2,Math.min(t.x+t.w-p.r-2,p.x));p.y=Math.max(t.y+p.r+2,Math.min(t.y+t.h-p.r-4,p.y));});
 });
 initTankP();initTubeP();scaleV();
 requestAnimationFrame(frame);
