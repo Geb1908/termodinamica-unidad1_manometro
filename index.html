@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Manómetro de Tubo en U</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0e1117;--panel:#161b22;--border:#21262d;
+    --text:#c9d1d9;--dim:#6e7681;--accent:#58a6ff;
+    --red:#f85149;--green:#3fb950;--yellow:#d29922;
+    --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  }
+  html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden}
+  #app{display:flex;width:100%;height:100vh}
+  #sim-area{flex:1;position:relative;min-width:0}
+  #mainCanvas{display:block;width:100%;height:100%;cursor:crosshair}
+  #panel{width:290px;min-width:250px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;font-size:13px}
+  .ph{padding:14px 16px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:8px}
+  .ph::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;box-shadow:0 0 6px var(--accent);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .sec{padding:12px 16px;border-bottom:1px solid var(--border)}
+  .st{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+  .cr{margin-bottom:10px}
+  .cl{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;font-size:12px}
+  .cv{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:500}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--border);border-radius:2px;outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);box-shadow:0 0 4px rgba(88,166,255,.4);cursor:grab}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
+  select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-family:var(--sans);font-size:12px;outline:none;cursor:pointer}
+  select:focus{border-color:var(--accent)}
+  .dg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .dc{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 10px}
+  .dc.f{grid-column:1/-1}
+  .dl{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+  .dv{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text);line-height:1.2}
+  .du{font-size:10px;font-weight:400;color:var(--dim);margin-left:2px}
+  .eq{background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.15);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--accent);text-align:center;letter-spacing:.3px;line-height:1.6}
+  .li{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px;color:var(--dim)}
+  .ld{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .rh{background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:4px;padding:8px;font-size:11px;color:var(--dim);line-height:1.5;text-align:center}
+  @media(max-width:800px){#app{flex-direction:column}#panel{width:100%;max-height:42vh;border-left:none;border-top:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sim-area"><canvas id="mainCanvas"></canvas></div>
+  <div id="panel">
+    <div class="ph">Manómetro Tubo en U</div>
+    <div class="sec">
+      <div class="st">Controles</div>
+      <div class="cr">
+        <div class="cl"><span>Temperatura</span><span class="cv" id="vT">300 K</span></div>
+        <input type="range" id="sT" min="200" max="800" value="300" step="1">
+      </div>
+      <div class="cr">
+        <div class="cl"><span>Presión Atmosférica</span><span class="cv" id="vP">1013 hPa</span></div>
+        <input type="range" id="sP" min="800" max="1200" value="1013" step="1">
+      </div>
+      <div class="cr">
+        <div class="cl"><span>Diámetro tubo</span><span class="cv" id="vD">10 mm</span></div>
+        <input type="range" id="sD" min="2" max="30" value="10" step="0.5">
+      </div>
+      <div class="cr">
+        <div class="cl"><span>Fluido</span></div>
+        <select id="sF">
+          <option value="water" selected>Agua (H₂O)</option>
+          <option value="mercury">Mercurio (Hg)</option>
+          <option value="oil">Aceite</option>
+        </select>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="st">Mediciones</div>
+      <div class="dg">
+        <div class="dc"><div class="dl">P_gas</div><div class="dv" id="oP1">101325 <span class="du">Pa</span></div></div>
+        <div class="dc"><div class="dl">P_gas</div><div class="dv" id="oP2">760.0 <span class="du">mmHg</span></div></div>
+        <div class="dc"><div class="dl">Δh teórico</div><div class="dv" id="oH">0.00 <span class="du">mm</span></div></div>
+        <div class="dc"><div class="dl">Δh capilar</div><div class="dv" id="oC">0.00 <span class="du">mm</span></div></div>
+        <div class="dc f"><div class="dl">P cinética (partículas)</div><div class="dv" id="oK">— <span class="du">Pa</span></div></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="st">Ecuación</div>
+      <div class="eq">P<sub>gas</sub> = P<sub>atm</sub> + ρ g Δh<br>Δh<sub>cap</sub> = 2γ cos θ / (ρ g r)</div>
+    </div>
+    <div class="sec">
+      <div class="st">Leyenda</div>
+      <div class="li"><div class="ld" style="background:#58a6ff"></div>Partículas de gas</div>
+      <div class="li"><div class="ld" style="background:#f85149"></div>Vector de fuerza (impacto)</div>
+      <div class="li"><div class="ld" style="background:#3fb950"></div>Presión atmosférica</div>
+      <div class="li"><div class="ld" style="background:#d29922"></div>Regla de medición</div>
+    </div>
+    <div class="sec"><div class="rh">Clic y arrastrá sobre el tubo para medir Δh con la regla</div></div>
+  </div>
+</div>
+<script>
+"use strict";
+const kB=1.38e-23,mGas=4.65e-26,G_=9.81,NP=200,NTP=40;
+const FL={
+  water:  {rho:998,  gam:0.072,th:0,  c1:'rgba(80,170,255,0.55)',c2:'rgba(40,120,210,0.8)', hi:'rgba(140,210,255,0.3)'},
+  mercury:{rho:13546,gam:0.485,th:140,c1:'rgba(195,195,210,0.8)',c2:'rgba(140,140,160,0.9)',hi:'rgba(220,220,230,0.35)'},
+  oil:    {rho:890,  gam:0.035,th:25, c1:'rgba(215,175,70,0.6)', c2:'rgba(185,145,45,0.8)', hi:'rgba(240,210,120,0.3)'},
+};
+
+const S={
+  temp:300,Patm:101300,rho:998,gam:0.072,th:0,rad:0.005,fId:'water',
+  pp:[],       // tank particles
+  tp:[],       // tube particles (left arm gas)
+  Pgas:101300,Pkin:0,
+  hTgt:0,hCur:0,hVel:0,capOff:0,
+  imp:[],momS:0,pS:[],lkT:0,
+  rul:{vis:false,drag:false,y1:0,y2:0},
+};
+
+const cv=document.getElementById('mainCanvas');
+const cx=cv.getContext('2d');
+let W,H,L={};
+
+function resize(){
+  const a=document.getElementById('sim-area');
+  const d=devicePixelRatio;
+  W=cv.width=a.clientWidth*d;H=cv.height=a.clientHeight*d;
+  cv.style.width=a.clientWidth+'px';cv.style.height=a.clientHeight+'px';
+  cx.setTransform(d,0,0,d,0,0);
+  layout();
+}
+
+/* ═══ LAYOUT ═══
+   [  TANK  ]─────────┐ horizontal pipe
+   [  Gas   ]         ┃
+   [        ]     ┌───┘ 1      2
+   [________]     │         ┌──┐ ← open (P_atm)
+                  │ gas↓    │  │
+                  │ ░░░░    │░░│ ← fluid
+                  │ ░░░░    │░░│
+                  └─────────┘  │
+                               └ U-bend
+*/
+function layout(){
+  const w=W/devicePixelRatio,h=H/devicePixelRatio;
+
+  const tW=Math.min(240,w*0.28);
+  const tH=Math.min(300,h*0.50);
+  const tX=w*0.04;
+  const tY=h*0.16;
+
+  const pipeY=tY+tH*0.62;
+
+  const bore=Math.max(22,Math.min(34,w*0.038));
+  const wall=3;
+  const sep=bore*2.4;
+
+  const lbX=tX+tW+w*0.11;
+  const rbX=lbX+sep;
+
+  // Left arm: extends from above pipe entry down to U-bend
+  // The gas occupies from the top of the left arm down to the fluid surface
+  const leftTop=pipeY-Math.min(55,h*0.08);
+  const rightTop=leftTop-Math.min(45,h*0.065);
+  // U-bend at bottom — make tube long enough for fluid
+  const uBendY=Math.max(pipeY+h*0.28, tY+tH+h*0.04);
+
+  const gR=Math.min(18,tW*0.08);
+  const gX=tX+tW*0.72;
+  const gY=tY-6;
+
+  const zR=Math.min(62,w*0.07);
+  const zX=Math.min(w-zR-20, rbX+bore/2+wall+80+zR);
+  const zY=tY+zR+10;
+
+  L={w,h,
+    tank:{x:tX,y:tY,w:tW,h:tH},
+    gauge:{x:gX,y:gY,r:gR},
+    pipeY,bore,wall,sep,
+    lb:{cx:lbX},rb:{cx:rbX},
+    leftTop,rightTop,uBendY,
+    zoom:{x:zX,y:zY,r:zR},
+    _lft:0,_rft:0,
+  };
+}
+
+// ═══ PARTICLES ═══
+function initTankP(){
+  S.pp=[];
+  const t=L.tank;
+  for(let i=0;i<NP;i++){
+    S.pp.push({
+      x:t.x+8+Math.random()*(t.w-16),
+      y:t.y+8+Math.random()*(t.h*0.82),
+      vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,
+      r:2,hit:0,
+    });
+  }
+}
+
+function initTubeP(){
+  S.tp=[];
+  // These will be positioned in updateTubeP based on current fluid level
+  for(let i=0;i<NTP;i++){
+    S.tp.push({
+      x:0,y:0,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,
+      r:1.8,hit:0,
+    });
+  }
+}
+
+function scaleV(){
+  const v=Math.sqrt(3*kB*S.temp/mGas);
+  const px=0.5+(v/500)*2.8;
+  [...S.pp,...S.tp].forEach(p=>{
+    const a=Math.atan2(p.vy,p.vx);
+    const sp=px*(0.4+Math.random()*0.6);
+    p.vx=Math.cos(a)*sp;p.vy=Math.sin(a)*sp;
+  });
+}
+
+function surfYTank(){return L.tank.y+L.tank.h-14;}
+
+function updateTankP(dt){
+  const t=L.tank,sy=surfYTank(),m=dt*60;
+  S.pp.forEach(p=>{
+    p.x+=p.vx*m;p.y+=p.vy*m;
+    if(p.hit>0)p.hit-=dt;
+    if(p.x-p.r<t.x){p.x=t.x+p.r;p.vx=Math.abs(p.vx);}
+    if(p.x+p.r>t.x+t.w){p.x=t.x+t.w-p.r;p.vx=-Math.abs(p.vx);}
+    if(p.y-p.r<t.y){p.y=t.y+p.r;p.vy=Math.abs(p.vy);}
+    if(p.y+p.r>sy){
+      p.y=sy-p.r;
+      S.momS+=2*Math.abs(p.vy);
+      p.vy=-Math.abs(p.vy)*(0.9+Math.random()*0.1);
+      p.hit=0.35;
+      S.imp.push({x:p.x,y:sy,fy:-Math.abs(p.vy)*36,t:0.5});
+    }
+  });
+  S.imp=S.imp.filter(i=>{i.t-=dt;return i.t>0;});
+}
+
+// Update tube particles — bounce inside the left arm gas space
+function updateTubeP(dt){
+  if(!L._lix)return;
+  const lix=L._lix,lrix=L._lrix;
+  const topY=L.leftTop+4;
+  const botY=L._lft||L.leftTop+(L.uBendY-L.leftTop)*0.3;
+  const m=dt*60;
+
+  S.tp.forEach(p=>{
+    // Init position if out of bounds
+    if(p.x<lix||p.x>lrix||p.y<topY||p.y>botY){
+      p.x=lix+3+Math.random()*(lrix-lix-6);
+      p.y=topY+Math.random()*Math.max(10,(botY-topY-6));
+    }
+    p.x+=p.vx*m;p.y+=p.vy*m;
+    if(p.hit>0)p.hit-=dt;
+    // Wall bounces
+    if(p.x-p.r<lix){p.x=lix+p.r;p.vx=Math.abs(p.vx);}
+    if(p.x+p.r>lrix){p.x=lrix-p.r;p.vx=-Math.abs(p.vx);}
+    if(p.y-p.r<topY){p.y=topY+p.r;p.vy=Math.abs(p.vy);}
+    // Bounce on fluid surface
+    if(p.y+p.r>botY){
+      p.y=botY-p.r;
+      S.momS+=2*Math.abs(p.vy);
+      p.vy=-Math.abs(p.vy)*(0.9+Math.random()*0.1);
+      p.hit=0.35;
+      S.imp.push({x:p.x,y:botY,fy:-Math.abs(p.vy)*36,t:0.5,tube:true});
+    }
+  });
+}
+
+// ═══ PHYSICS ═══
+function calcKP(){
+  const now=performance.now()/1000;
+  if(now-S.lkT>0.1){
+    const area=L.tank.w*0.01;
+    const pk=S.momS/(0.1*area)*50;
+    S.pS.push(pk);if(S.pS.length>20)S.pS.shift();
+    S.Pkin=S.pS.reduce((a,b)=>a+b,0)/S.pS.length;
+    S.momS=0;S.lkT=now;
+  }
+}
+
+function calcMan(){
+  const Pg=S.Patm*(S.temp/300);
+  S.Pgas=Pg;
+  S.hTgt=(Pg-S.Patm)/(S.rho*G_);
+  S.capOff=(2*S.gam*Math.cos(S.th*Math.PI/180))/(S.rho*G_*S.rad);
+  const d=S.hTgt-S.hCur;
+  S.hVel+=d*4.5/60;
+  S.hVel*=0.84;
+  S.hCur+=S.hVel;
+}
+
+// ═══ DRAW HELPERS ═══
+function rrect(x,y,w,h,r){
+  cx.beginPath();
+  cx.moveTo(x+r,y);cx.lineTo(x+w-r,y);cx.quadraticCurveTo(x+w,y,x+w,y+r);
+  cx.lineTo(x+w,y+h-r);cx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  cx.lineTo(x+r,y+h);cx.quadraticCurveTo(x,y+h,x,y+h-r);
+  cx.lineTo(x,y+r);cx.quadraticCurveTo(x,y,x+r,y);cx.closePath();
+}
+function sarc(x,y,r,a1,a2,cc){cx.arc(x,y,Math.max(0.1,r),a1,a2,cc);}
+
+// ═══ DRAW: Background ═══
+function drawBg(){
+  cx.fillStyle='#0e1117';cx.fillRect(0,0,L.w,L.h);
+  cx.strokeStyle='rgba(255,255,255,0.018)';cx.lineWidth=1;
+  for(let x=0;x<L.w;x+=40){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,L.h);cx.stroke();}
+  for(let y=0;y<L.h;y+=40){cx.beginPath();cx.moveTo(0,y);cx.lineTo(L.w,y);cx.stroke();}
+}
+
+// ═══ DRAW: Tank ═══
+function drawTank(){
+  const t=L.tank;
+  cx.save();
+  cx.shadowColor='rgba(0,0,0,0.2)';cx.shadowBlur=15;cx.shadowOffsetX=3;cx.shadowOffsetY=3;
+  const bg=cx.createLinearGradient(t.x,0,t.x+t.w,0);
+  bg.addColorStop(0,'#2a2f38');bg.addColorStop(0.35,'#363c46');bg.addColorStop(0.7,'#2e333c');bg.addColorStop(1,'#24292e');
+  rrect(t.x,t.y,t.w,t.h,10);cx.fillStyle=bg;cx.fill();
+  cx.shadowColor='transparent';
+  // Top ellipse
+  cx.beginPath();cx.ellipse(t.x+t.w/2,t.y,t.w/2,11,0,0,Math.PI*2);
+  const tg=cx.createLinearGradient(t.x,t.y-11,t.x+t.w,t.y+11);
+  tg.addColorStop(0,'#3a4148');tg.addColorStop(0.5,'#464d56');tg.addColorStop(1,'#2e333b');
+  cx.fillStyle=tg;cx.fill();cx.strokeStyle='#4a5060';cx.lineWidth=1;cx.stroke();
+  // Bottom ellipse
+  cx.beginPath();cx.ellipse(t.x+t.w/2,t.y+t.h,t.w/2,11,0,Math.PI,Math.PI*2);
+  cx.strokeStyle='#4a5060';cx.lineWidth=1;cx.stroke();
+  // Edges
+  cx.strokeStyle='#4a5060';cx.lineWidth=1.5;
+  cx.beginPath();cx.moveTo(t.x,t.y);cx.lineTo(t.x,t.y+t.h);cx.stroke();
+  cx.beginPath();cx.moveTo(t.x+t.w,t.y);cx.lineTo(t.x+t.w,t.y+t.h);cx.stroke();
+  // Rivets
+  cx.strokeStyle='rgba(255,255,255,0.04)';cx.lineWidth=1;cx.setLineDash([6,5]);
+  cx.beginPath();cx.moveTo(t.x+8,t.y+18);cx.lineTo(t.x+t.w-8,t.y+18);cx.stroke();
+  cx.beginPath();cx.moveTo(t.x+8,t.y+t.h-14);cx.lineTo(t.x+t.w-8,t.y+t.h-14);cx.stroke();
+  cx.setLineDash([]);
+  // Label
+  cx.fillStyle='rgba(200,210,220,0.4)';cx.font='600 14px "IBM Plex Mono"';cx.textAlign='center';
+  cx.fillText('Gas',t.x+t.w*0.4,t.y+t.h*0.35);
+  // Fluid pool
+  const fl=FL[S.fId],pH=14,pY=t.y+t.h-pH;
+  const pg=cx.createLinearGradient(0,pY,0,pY+pH);
+  pg.addColorStop(0,fl.c1);pg.addColorStop(1,fl.c2);
+  cx.fillStyle=pg;cx.fillRect(t.x+3,pY,t.w-6,pH-2);
+  cx.restore();
+}
+
+// ═══ DRAW: Gauge ═══
+function drawGauge(){
+  const g=L.gauge,t=L.tank;
+  cx.save();
+  cx.strokeStyle='#4a5060';cx.lineWidth=4;
+  cx.beginPath();cx.moveTo(g.x,t.y);cx.lineTo(g.x,g.y-g.r);cx.stroke();
+  const cy=g.y-g.r-2;
+  cx.beginPath();sarc(g.x,cy,g.r+3,0,Math.PI*2);cx.fillStyle='#1a1e26';cx.fill();cx.strokeStyle='#4a5060';cx.lineWidth=2;cx.stroke();
+  cx.beginPath();sarc(g.x,cy,Math.max(1,g.r-2),0,Math.PI*2);cx.fillStyle='#0d1117';cx.fill();
+  const ir=Math.max(2,g.r-4);
+  for(let a=-140;a<=140;a+=28){const r2=(a-90)*Math.PI/180;
+    cx.beginPath();cx.moveTo(g.x+Math.cos(r2)*(ir-3),cy+Math.sin(r2)*(ir-3));
+    cx.lineTo(g.x+Math.cos(r2)*ir,cy+Math.sin(r2)*ir);
+    cx.strokeStyle='rgba(200,210,220,0.3)';cx.lineWidth=1;cx.stroke();}
+  const pR=S.Pgas/(S.Patm*3);
+  const na=(-140+pR*280-90)*Math.PI/180;
+  cx.beginPath();cx.moveTo(g.x,cy);cx.lineTo(g.x+Math.cos(na)*ir,cy+Math.sin(na)*ir);
+  cx.strokeStyle='#f85149';cx.lineWidth=1.5;cx.stroke();
+  cx.beginPath();sarc(g.x,cy,2,0,Math.PI*2);cx.fillStyle='#f85149';cx.fill();
+  cx.restore();
+}
+
+// ═══ DRAW: Pipe ═══
+function drawPipe(){
+  const t=L.tank,py=L.pipeY,lbx=L.lb.cx,hw=L.bore/2,pr=6;
+  const x1=t.x+t.w,x2=lbx-hw-L.wall;
+  cx.save();
+  cx.strokeStyle='#3a4048';cx.lineWidth=pr*2;cx.lineCap='round';
+  cx.beginPath();cx.moveTo(x1,py);cx.lineTo(x2,py);cx.stroke();
+  cx.strokeStyle='#161b22';cx.lineWidth=pr*2-4;
+  cx.beginPath();cx.moveTo(x1,py);cx.lineTo(x2,py);cx.stroke();
+  cx.fillStyle='#4a5060';
+  cx.fillRect(x1-2,py-pr-2,5,pr*2+4);
+  cx.fillRect(x2-2,py-pr-2,5,pr*2+4);
+  cx.restore();
+}
+
+// ═══ DRAW: U-Tube ═══
+function drawUTube(){
+  const {bore:bw,wall:wt,lb,rb}=L;
+  const hw=bw/2;
+  const llx=lb.cx-hw-wt,lix=lb.cx-hw,lrix=lb.cx+hw,lrx=lb.cx+hw+wt;
+  const rlx=rb.cx-hw-wt,rix=rb.cx-hw,rrix=rb.cx+hw,rrx=rb.cx+hw+wt;
+  const lTop=L.leftTop,rTop=L.rightTop,bY=L.uBendY;
+
+  const outerR=Math.max(1,(rrx-llx)/2);
+  const innerR=Math.max(0,(rlx-lrx)/2);
+  const arcX=(llx+rrx)/2;
+  const boreOR=Math.max(1,(rrix-lix)/2);
+  const boreIR=Math.max(0,(rix-lrix)/2);
+  const boreAX=(lix+rrix)/2;
+
+  cx.save();
+  const gf='rgba(180,200,220,0.05)',gs='rgba(180,200,220,0.22)';
+
+  // Glass walls
+  cx.fillStyle=gf;
+  cx.fillRect(llx,lTop,lrx-llx,bY-lTop);
+  cx.fillRect(rlx,rTop,rrx-rlx,bY-rTop);
+  // U-bend glass
+  cx.beginPath();cx.moveTo(llx,bY);sarc(arcX,bY,outerR,Math.PI,0,true);
+  cx.lineTo(rlx,bY);if(innerR>1)sarc(arcX,bY,innerR,0,Math.PI,false);else cx.lineTo(lrx,bY);
+  cx.closePath();cx.fill();
+
+  // Bore (dark)
+  cx.fillStyle='#0a0e14';
+  cx.fillRect(lix,lTop,bw,bY-lTop);
+  cx.fillRect(rix,rTop,bw,bY-rTop);
+  cx.beginPath();cx.moveTo(lix,bY);sarc(boreAX,bY,boreOR,Math.PI,0,true);
+  cx.lineTo(rix,bY);if(boreIR>1)sarc(boreAX,bY,boreIR,0,Math.PI,false);else cx.lineTo(lrix,bY);
+  cx.closePath();cx.fill();
+
+  // Glass outlines
+  cx.strokeStyle=gs;cx.lineWidth=1.5;
+  cx.beginPath();cx.moveTo(llx,lTop);cx.lineTo(llx,bY);cx.stroke();
+  cx.beginPath();cx.moveTo(lrx,lTop);cx.lineTo(lrx,bY);cx.stroke();
+  cx.beginPath();cx.moveTo(rlx,rTop);cx.lineTo(rlx,bY);cx.stroke();
+  cx.beginPath();cx.moveTo(rrx,rTop);cx.lineTo(rrx,bY);cx.stroke();
+  cx.beginPath();sarc(arcX,bY,outerR,Math.PI,0,true);cx.stroke();
+  if(innerR>1){cx.beginPath();sarc(arcX,bY,innerR,Math.PI,0,true);cx.stroke();}
+  cx.beginPath();cx.moveTo(llx,lTop);cx.lineTo(lrx,lTop);cx.stroke();
+  cx.beginPath();cx.moveTo(rlx,rTop);cx.lineTo(rrx,rTop);cx.stroke();
+
+  // Highlight
+  const hl=cx.createLinearGradient(llx,0,llx+wt,0);
+  hl.addColorStop(0,'rgba(255,255,255,0.04)');hl.addColorStop(1,'transparent');
+  cx.fillStyle=hl;cx.fillRect(llx,lTop,wt,bY-lTop);
+
+  // Pipe entry hole
+  const py=L.pipeY,pr=6;
+  cx.fillStyle='#161b22';cx.fillRect(llx-1,py-pr+2,wt+2,pr*2-4);
+
+  // Labels
+  cx.font='600 10px "IBM Plex Mono"';cx.textAlign='center';
+  cx.fillStyle='rgba(88,166,255,0.5)';cx.fillText('1',lb.cx,bY+outerR+16);
+  cx.fillStyle='rgba(63,185,80,0.5)';cx.fillText('2',rb.cx,bY+outerR+16);
+
+  // P_atm arrow
+  cx.strokeStyle='rgba(63,185,80,0.4)';cx.lineWidth=1.5;
+  cx.beginPath();cx.moveTo(rb.cx,rTop);cx.lineTo(rb.cx,rTop-10);
+  cx.moveTo(rb.cx-3,rTop-6);cx.lineTo(rb.cx,rTop-10);cx.lineTo(rb.cx+3,rTop-6);cx.stroke();
+  cx.fillStyle='rgba(63,185,80,0.4)';cx.font='400 8px "IBM Plex Mono"';
+  cx.fillText('P_atm',rb.cx,rTop-14);
+
+  cx.restore();
+
+  L._lix=lix;L._lrix=lrix;L._rix=rix;L._rrix=rrix;
+  L._llx=llx;L._lrx=lrx;L._rlx=rlx;L._rrx=rrx;
+  L._bY=bY;L._boreAX=boreAX;L._boreOR=boreOR;L._boreIR=boreIR;
+  L._outerR=outerR;L._arcX=arcX;
+}
+
+// ═══ DRAW: Fluid ═══
+function drawFluid(){
+  const {bore:bw}=L;
+  const fl=FL[S.fId];
+  const lix=L._lix,lrix=L._lrix,rix=L._rix,rrix=L._rrix;
+  const bY=L._bY;
+
+  // The total arm height available for fluid movement
+  const armH=bY-L.leftTop;
+  // Equilibrium: fluid fills ~70% of the arm (30% from top)
+  const eqFrac=0.28;
+  const eqY=L.leftTop+armH*eqFrac;
+
+  // Convert hCur (meters) to pixels.
+  // Scale so max slider range produces ~40% of arm height displacement
+  const maxH=(S.Patm*((800/300)-1))/(S.rho*G_); // max theoretical h
+  const maxPx=armH*0.35;
+  const hPx=maxH>0?(S.hCur/maxH)*maxPx:0;
+  // Store scale factor for ruler: meters per pixel
+  L._mPerPx=maxH>0&&maxPx>0?maxH/maxPx:0.0004;
+
+  // Fluid levels (clamped within arm)
+  const margin=12;
+  const rawL=eqY+hPx/2;
+  const rawR=eqY-hPx/2;
+  const lftY=Math.max(L.leftTop+margin, Math.min(bY-margin, rawL));
+  const rftY=Math.max(L.rightTop+margin, Math.min(bY-margin, rawR));
+  L._lft=lftY;L._rft=rftY;
+
+  cx.save();
+  // Clip to bore
+  cx.beginPath();
+  cx.rect(lix,L.leftTop,bw,bY-L.leftTop);
+  cx.rect(rix,L.rightTop,bw,bY-L.rightTop);
+  cx.moveTo(lix,bY);
+  if(L._boreOR>1)sarc(L._boreAX,bY,L._boreOR,Math.PI,0,true);else cx.lineTo(rrix,bY);
+  cx.lineTo(rix,bY);
+  if(L._boreIR>1)sarc(L._boreAX,bY,L._boreIR,0,Math.PI,false);else cx.lineTo(lrix,bY);
+  cx.closePath();cx.clip();
+
+  // U-bend fill
+  const bg=cx.createLinearGradient(lix,bY-20,rrix,bY+L._boreOR);
+  bg.addColorStop(0,fl.c1);bg.addColorStop(1,fl.c2);
+  cx.fillStyle=bg;
+  cx.fillRect(lix,bY-30,rrix-lix,L._boreOR+60);
+
+  // Left column
+  const gL=cx.createLinearGradient(lix,0,lrix,0);
+  gL.addColorStop(0,fl.c2);gL.addColorStop(0.5,fl.c1);gL.addColorStop(1,fl.c2);
+  cx.fillStyle=gL;cx.fillRect(lix,lftY,bw,bY-lftY+5);
+
+  // Right column
+  const gR=cx.createLinearGradient(rix,0,rrix,0);
+  gR.addColorStop(0,fl.c2);gR.addColorStop(0.5,fl.c1);gR.addColorStop(1,fl.c2);
+  cx.fillStyle=gR;cx.fillRect(rix,rftY,bw,bY-rftY+5);
+
+  // Menisci
+  drawMen(lix,lrix,lftY,fl);
+  drawMen(rix,rrix,rftY,fl);
+
+  cx.restore();
+
+  // ── Δh indicator ──
+  if(Math.abs(hPx)>2){
+    cx.save();
+    cx.setLineDash([4,4]);cx.strokeStyle='rgba(210,153,34,0.4)';cx.lineWidth=1;
+    const eL=L._llx-10,eR=L._rrx+14;
+    cx.beginPath();cx.moveTo(eL,lftY);cx.lineTo(eR,lftY);cx.stroke();
+    cx.beginPath();cx.moveTo(eL,rftY);cx.lineTo(eR,rftY);cx.stroke();
+    cx.setLineDash([]);
+    const aX=L._rrx+20;
+    cx.strokeStyle='rgba(210,153,34,0.7)';cx.lineWidth=1.5;
+    cx.beginPath();cx.moveTo(aX,lftY);cx.lineTo(aX,rftY);cx.stroke();
+    const sg=Math.sign(rftY-lftY);
+    [[aX,lftY,sg],[aX,rftY,-sg]].forEach(([x,y,d])=>{
+      cx.beginPath();cx.moveTo(x-3,y+5*d);cx.lineTo(x,y);cx.lineTo(x+3,y+5*d);cx.stroke();});
+    cx.fillStyle='rgba(210,153,34,0.85)';cx.font='600 11px "IBM Plex Mono"';cx.textAlign='left';
+    cx.fillText(`h = ${Math.abs(S.hCur*1000).toFixed(1)} mm`,aX+8,(lftY+rftY)/2+4);
+    cx.restore();
+  }
+}
+
+function drawMen(x1,x2,topY,fl){
+  const w=x2-x1;
+  const d=fl.th>90?-(3.5):(3.5);
+  cx.save();
+  cx.fillStyle='#0a0e14';cx.fillRect(x1,topY-4,w,6);
+  cx.beginPath();cx.moveTo(x1,topY);
+  cx.quadraticCurveTo(x1+w/2,topY+d,x2,topY);
+  cx.lineTo(x2,topY+6);cx.lineTo(x1,topY+6);cx.closePath();
+  const mg=cx.createLinearGradient(x1,topY,x2,topY);
+  mg.addColorStop(0,fl.c2);mg.addColorStop(0.5,fl.c1);mg.addColorStop(1,fl.c2);
+  cx.fillStyle=mg;cx.fill();
+  cx.beginPath();cx.moveTo(x1,topY);
+  cx.quadraticCurveTo(x1+w/2,topY+d,x2,topY);
+  cx.strokeStyle=fl.hi;cx.lineWidth=1;cx.stroke();
+  cx.restore();
+}
+
+// ═══ DRAW: Particles ═══
+function drawTankPart(){
+  const t=L.tank;
+  cx.save();cx.beginPath();cx.rect(t.x+1,t.y+1,t.w-2,t.h-16);cx.clip();
+  S.pp.forEach(p=>{
+    cx.beginPath();sarc(p.x,p.y,p.r,0,Math.PI*2);
+    cx.fillStyle=p.hit>0?`rgba(248,81,73,${Math.min(1,p.hit*3)})`:'rgba(88,166,255,0.6)';cx.fill();
+    if(p.hit>0){cx.beginPath();sarc(p.x,p.y,p.r+3,0,Math.PI*2);
+      cx.strokeStyle=`rgba(248,81,73,${p.hit*1.5})`;cx.lineWidth=0.5;cx.stroke();}
+  });
+  cx.restore();
+}
+
+// Draw particles inside the left arm of U-tube (gas space)
+function drawTubePart(){
+  if(!L._lix)return;
+  const lix=L._lix,lrix=L._lrix;
+  const topY=L.leftTop;
+  const botY=L._lft;
+  cx.save();
+  // Clip to left arm bore above fluid
+  cx.beginPath();cx.rect(lix,topY,lrix-lix,Math.max(1,botY-topY));cx.clip();
+  S.tp.forEach(p=>{
+    cx.beginPath();sarc(p.x,p.y,p.r,0,Math.PI*2);
+    cx.fillStyle=p.hit>0?`rgba(248,81,73,${Math.min(1,p.hit*3)})`:'rgba(88,166,255,0.65)';cx.fill();
+    if(p.hit>0){cx.beginPath();sarc(p.x,p.y,p.r+2.5,0,Math.PI*2);
+      cx.strokeStyle=`rgba(248,81,73,${p.hit*1.5})`;cx.lineWidth=0.5;cx.stroke();}
+  });
+  cx.restore();
+}
+
+// ═══ DRAW: Zoom Lens ═══
+function drawZoom(){
+  const z=L.zoom,fl=FL[S.fId];
+  const surfY=L._lft;
+  const lcx=L.lb.cx,hw=L.bore/2;
+  const lix=L._lix,lrix=L._lrix;
+  if(!lix)return;
+
+  cx.save();
+  cx.setLineDash([4,4]);cx.strokeStyle='rgba(88,166,255,0.1)';cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(L._lrx+3,surfY);cx.lineTo(z.x-z.r,z.y);cx.stroke();
+  cx.setLineDash([]);
+
+  cx.beginPath();sarc(z.x,z.y,z.r,0,Math.PI*2);cx.clip();
+  cx.fillStyle='#070a10';cx.fillRect(z.x-z.r,z.y-z.r,z.r*2,z.r*2);
+
+  const sc=4,srcX=lcx,srcY=surfY;
+  cx.save();cx.translate(z.x,z.y);cx.scale(sc,sc);cx.translate(-srcX,-srcY);
+  const vR=z.r/sc;
+
+  // Tube walls
+  cx.fillStyle='rgba(180,200,220,0.06)';
+  cx.fillRect(lix-3,srcY-vR-5,3,vR*2+10);
+  cx.fillRect(lrix,srcY-vR-5,3,vR*2+10);
+  cx.strokeStyle='rgba(180,200,220,0.2)';cx.lineWidth=0.3;
+  cx.beginPath();cx.moveTo(lix,srcY-vR-5);cx.lineTo(lix,srcY+vR+5);cx.stroke();
+  cx.beginPath();cx.moveTo(lrix,srcY-vR-5);cx.lineTo(lrix,srcY+vR+5);cx.stroke();
+
+  // Fluid + jitter
+  const t=performance.now();
+  const jit=Math.sin(t/180)*0.4+Math.cos(t/130)*0.3+Math.sin(t/90)*0.15;
+  const jY=surfY+jit;
+  const fg=cx.createLinearGradient(lix,jY,lrix,jY);
+  fg.addColorStop(0,fl.c2);fg.addColorStop(0.5,fl.c1);fg.addColorStop(1,fl.c2);
+  cx.fillStyle=fg;cx.fillRect(lix,jY,L.bore,vR+10);
+
+  // Meniscus
+  const md=fl.th>90?-2:2;
+  cx.fillStyle='#070a10';cx.fillRect(lix,jY-2,L.bore,3.5);
+  cx.beginPath();cx.moveTo(lix,jY);cx.quadraticCurveTo(lcx,jY+md,lrix,jY);
+  cx.lineTo(lrix,jY+3.5);cx.lineTo(lix,jY+3.5);cx.closePath();cx.fillStyle=fg;cx.fill();
+  cx.beginPath();cx.moveTo(lix,jY);cx.quadraticCurveTo(lcx,jY+md,lrix,jY);
+  cx.strokeStyle=fl.hi;cx.lineWidth=0.25;cx.stroke();
+
+  // ── Tube particles in zoom (actual positions, they're already in the bore) ──
+  S.tp.forEach(p=>{
+    if(Math.abs(p.x-srcX)>vR+5||Math.abs(p.y-srcY)>vR+5)return;
+    cx.beginPath();sarc(p.x,p.y,p.r*0.8,0,Math.PI*2);
+    cx.fillStyle=p.hit>0?'rgba(248,81,73,0.9)':'rgba(88,166,255,0.8)';cx.fill();
+    // Velocity vector
+    cx.beginPath();cx.moveTo(p.x,p.y);cx.lineTo(p.x+p.vx*2.5,p.y+p.vy*2.5);
+    cx.strokeStyle=p.hit>0?'rgba(248,81,73,0.3)':'rgba(88,166,255,0.2)';cx.lineWidth=0.25;cx.stroke();
+  });
+
+  // Impact vectors (tube-side only)
+  S.imp.filter(i=>i.tube).forEach(imp=>{
+    if(Math.abs(imp.x-srcX)>vR+5)return;
+    const a=imp.t/0.5;
+    cx.strokeStyle=`rgba(248,81,73,${a})`;cx.lineWidth=0.5;
+    cx.beginPath();cx.moveTo(imp.x,jY-1);cx.lineTo(imp.x,jY+5);cx.stroke();
+    cx.beginPath();cx.moveTo(imp.x-1,jY+3.5);cx.lineTo(imp.x,jY+5.5);cx.lineTo(imp.x+1,jY+3.5);cx.stroke();
+  });
+
+  cx.restore();
+
+  // Ring
+  cx.beginPath();sarc(z.x,z.y,z.r,0,Math.PI*2);
+  cx.strokeStyle='#30363d';cx.lineWidth=3;cx.stroke();
+  cx.strokeStyle='rgba(88,166,255,0.2)';cx.lineWidth=1;cx.stroke();
+
+  cx.fillStyle='rgba(88,166,255,0.4)';cx.font='500 9px "IBM Plex Mono"';cx.textAlign='center';
+  cx.fillText('ZOOM 4×',z.x,z.y+z.r+13);
+  cx.font='400 8px "IBM Plex Mono"';
+  cx.fillText('Interfaz gas-líquido',z.x,z.y+z.r+24);
+  cx.restore();
+}
+
+// ═══ DRAW: Ruler ═══
+function drawRuler(){
+  if(!S.rul.vis||!L._llx)return;
+  const rx=L._llx-30;
+  cx.save();
+  const y1=Math.min(S.rul.y1,S.rul.y2),y2=Math.max(S.rul.y1,S.rul.y2);
+  cx.fillStyle='rgba(210,153,34,0.06)';cx.fillRect(L._llx,y1,L._rrx-L._llx,y2-y1);
+  cx.strokeStyle='rgba(210,153,34,0.4)';cx.lineWidth=1;cx.setLineDash([3,3]);
+  cx.beginPath();cx.moveTo(rx-10,y1);cx.lineTo(L._rrx,y1);cx.stroke();
+  cx.beginPath();cx.moveTo(rx-10,y2);cx.lineTo(L._rrx,y2);cx.stroke();cx.setLineDash([]);
+  cx.strokeStyle='rgba(210,153,34,0.8)';cx.lineWidth=2;
+  cx.beginPath();cx.moveTo(rx,y1);cx.lineTo(rx,y2);cx.stroke();
+  cx.lineWidth=1.5;
+  [y1,y2].forEach(y=>{cx.beginPath();cx.moveTo(rx-5,y);cx.lineTo(rx+5,y);cx.stroke();});
+  cx.fillStyle='rgba(210,153,34,0.9)';cx.font='600 12px "IBM Plex Mono"';cx.textAlign='right';
+  cx.fillText(`${(Math.abs(y2-y1)*(L._mPerPx||0.0004)*1000).toFixed(1)} mm`,rx-12,(y1+y2)/2+4);
+  [y1,y2].forEach(y=>{cx.beginPath();sarc(rx,y,5,0,Math.PI*2);
+    cx.fillStyle='rgba(210,153,34,0.9)';cx.fill();cx.strokeStyle='#0e1117';cx.lineWidth=1.5;cx.stroke();});
+  cx.restore();
+}
+
+// ═══ UI ═══
+function updateUI(){
+  const p=S.Pgas;
+  document.getElementById('oP1').innerHTML=`${p.toFixed(0)} <span class="du">Pa</span>`;
+  document.getElementById('oP2').innerHTML=`${(p/133.322).toFixed(1)} <span class="du">mmHg</span>`;
+  document.getElementById('oH').innerHTML=`${(S.hTgt*1000).toFixed(2)} <span class="du">mm</span>`;
+  document.getElementById('oC').innerHTML=`${(S.capOff*1000).toFixed(2)} <span class="du">mm</span>`;
+  document.getElementById('oK').innerHTML=`${S.Pkin.toFixed(0)} <span class="du">Pa (rel)</span>`;
+}
+
+// ═══ MAIN LOOP ═══
+let lt=0;
+function frame(t){
+  const dt=Math.min((t-lt)/1000,0.05)||0.016;lt=t;
+  updateTankP(dt);updateTubeP(dt);calcKP();calcMan();
+  drawBg();drawPipe();drawTank();drawGauge();
+  drawUTube();drawFluid();drawTankPart();drawTubePart();
+  drawZoom();drawRuler();updateUI();
+  requestAnimationFrame(frame);
+}
+
+// ═══ CONTROLS ═══
+document.getElementById('sT').addEventListener('input',function(){S.temp=+this.value;document.getElementById('vT').textContent=this.value+' K';scaleV();});
+document.getElementById('sP').addEventListener('input',function(){S.Patm=+this.value*100;document.getElementById('vP').textContent=this.value+' hPa';});
+document.getElementById('sD').addEventListener('input',function(){S.rad=+this.value/2000;document.getElementById('vD').textContent=this.value+' mm';});
+document.getElementById('sF').addEventListener('change',function(){const f=FL[this.value];S.fId=this.value;S.rho=f.rho;S.gam=f.gam;S.th=f.th;});
+
+// ═══ RULER ═══
+(function(){
+  let dH=null;
+  function pos(e){const r=cv.getBoundingClientRect();return{x:(e.touches?e.touches[0].clientX:e.clientX)-r.left,y:(e.touches?e.touches[0].clientY:e.clientY)-r.top};}
+  function nearT(p){return L._llx&&p.x>=L._llx-50&&p.x<=L._rrx+70&&p.y>=L.rightTop-10&&p.y<=L._bY+10;}
+  function nearH(p,hy){return Math.abs(p.x-(L._llx-30))<18&&Math.abs(p.y-hy)<14;}
+  cv.addEventListener('mousedown',e=>{const p=pos(e);
+    if(S.rul.vis){const a=Math.min(S.rul.y1,S.rul.y2),b=Math.max(S.rul.y1,S.rul.y2);
+      if(nearH(p,a)){dH='t';return;}if(nearH(p,b)){dH='b';return;}}
+    if(nearT(p)){S.rul.vis=true;S.rul.y1=p.y;S.rul.y2=p.y;S.rul.drag=true;}});
+  cv.addEventListener('mousemove',e=>{const p=pos(e);
+    if(S.rul.drag)S.rul.y2=p.y;else if(dH==='t')S.rul.y1=Math.min(p.y,S.rul.y2-5);else if(dH==='b')S.rul.y2=Math.max(p.y,S.rul.y1+5);
+    if(S.rul.vis){const a=Math.min(S.rul.y1,S.rul.y2),b=Math.max(S.rul.y1,S.rul.y2);
+      cv.style.cursor=(nearH(p,a)||nearH(p,b))?'ns-resize':nearT(p)?'crosshair':'default';}
+    else cv.style.cursor=nearT(p)?'crosshair':'default';});
+  cv.addEventListener('mouseup',()=>{S.rul.drag=false;dH=null;if(S.rul.vis&&Math.abs(S.rul.y1-S.rul.y2)<3)S.rul.vis=false;});
+  cv.addEventListener('touchstart',e=>{e.preventDefault();const p=pos(e);if(nearT(p)){S.rul.vis=true;S.rul.y1=p.y;S.rul.y2=p.y;S.rul.drag=true;}},{passive:false});
+  cv.addEventListener('touchmove',e=>{e.preventDefault();if(S.rul.drag)S.rul.y2=pos(e).y;},{passive:false});
+  cv.addEventListener('touchend',()=>{S.rul.drag=false;if(S.rul.vis&&Math.abs(S.rul.y1-S.rul.y2)<3)S.rul.vis=false;});
+})();
+
+// ═══ INIT ═══
+resize();
+window.addEventListener('resize',()=>{resize();
+  const t=L.tank;S.pp.forEach(p=>{p.x=Math.max(t.x+p.r+2,Math.min(t.x+t.w-p.r-2,p.x));p.y=Math.max(t.y+p.r+2,Math.min(t.y+t.h-p.r-16,p.y));});
+});
+initTankP();initTubeP();scaleV();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
